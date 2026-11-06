@@ -6,7 +6,11 @@ const cleaningTaskRepository = {
     return CleaningTask.create(data);
   },
   findById(id) {
-    return CleaningTask.findById(id).populate('roomId').populate('assignedStaffId', 'name email');
+    return CleaningTask.findById(id).populate('roomId').populate('assignedStaffId', 'name email phone');
+  },
+  completeForStaff(id, staffId, data, session) {
+    return CleaningTask.findOneAndUpdate({ _id: id, assignedStaffId: staffId, status: 'InProgress' },
+      { $set: data }, { new: true, runValidators: true, session });
   },
   findByStaff(staffId, statusFilter) {
     const filter = { assignedStaffId: staffId };

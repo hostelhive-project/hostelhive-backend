@@ -84,4 +84,4 @@ async function verifyOnChain(record) {
     return { onChainVerified: valid, verificationState: valid ? 'Verified' : 'Mismatch' };
   } catch { return { onChainVerified: false, verificationState: 'Unavailable' }; }
 }
-module.exports = { writeRecord, hashPayload, verifyRecord: repository.find, verifyOnChain };
+module.exports = { writeRecord, hashPayload, verifyOnChain };

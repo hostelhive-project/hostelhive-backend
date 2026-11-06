@@ -15,7 +15,6 @@ function payloadFor(type, source, version = 1) {
 }
 
 module.exports = {
-  payloadFor,
   async enqueue(sourceType, source, session) {
     await outbox.enqueue(`anchor:${sourceType}:${source._id}`, 'BlockchainAnchor', {
       sourceType, sourceId: String(source._id), snapshot: payloadFor(sourceType, source),

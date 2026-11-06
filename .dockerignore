@@ -1,0 +1,12 @@
+# Production context: application code, dependency lock, and the npm start hook.
+**
+!package.json
+!package-lock.json
+!server.js
+!src/
+!src/**
+!scripts/
+scripts/**
+!scripts/start-local-mongo.cjs
+!Dockerfile
+!.dockerignore

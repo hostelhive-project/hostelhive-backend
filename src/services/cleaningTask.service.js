@@ -3,6 +3,8 @@ const unitOfWork = require('../repositories/unitOfWork');
 const AppError = require('../utils/AppError');
 const cleaningTaskRepository = require('../repositories/cleaningTask.repository');
 const notificationService = require('./notification.service');
+const outboxRepository = require('../repositories/outbox.repository');
+const env = require('../config/env');
 const { CleaningTask } = require('../repositories/data.repository');
 const { Room } = require('../repositories/data.repository');
 const { User } = require('../repositories/data.repository');
@@ -127,12 +129,25 @@ const cleaningTaskService = {
       throw new AppError('An after-cleaning photo (afterImageUri) is required to complete this task', 400);
     }
 
-    task.status = 'Completed';
-    task.completedAt = new Date();
-    task.afterImageUri = afterImageUri;
-    if (staffNotes) task.staffNotes = staffNotes;
-    await dataRepository.save(task);
-    return task.populate('roomId', 'roomNumber floor layoutType');
+    // Persist completion and its durable background request together; never wait for Groq here.
+    const completed = await unitOfWork(async (session) => {
+      const queuedAt = new Date();
+      const updated = await cleaningTaskRepository.completeForStaff(taskId, staffId, {
+        status: 'Completed', completedAt: queuedAt, afterImageUri,
+        ...(staffNotes ? { staffNotes } : {}),
+        cleaningAssessment: {
+          status: env.integrations.cleaningAi.enabled ? 'Pending' : 'Unavailable',
+          queuedAt, model: env.integrations.cleaningAi.model,
+          reason: env.integrations.cleaningAi.enabled ? null : 'disabled',
+        },
+      }, session);
+      if (!updated) throw new AppError('This task has already changed. Refresh before completing it.', 409);
+      if (env.integrations.cleaningAi.enabled) {
+        await outboxRepository.enqueue(`cleaning-ai:${taskId}`, 'CleaningAssessment', { taskId }, session);
+      }
+      return updated;
+    });
+    return completed.populate('roomId', 'roomNumber floor layoutType');
   },
 
   async delay(taskId, staffId, reason) {

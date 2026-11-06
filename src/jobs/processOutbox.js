@@ -26,6 +26,10 @@ function scheduleOutbox() {
           if (job.kind === 'BlockchainAnchor') await require('../services/blockchain.service').anchor(job.payload);
           else if (job.kind === 'Notification') await require('../services/notification.service').notify({ ...job.payload, deliveryKey: job._id });
           else if (job.kind === 'StripeAdjustment') await require('../services/paymentAdjustment.service').reconcile(job.payload);
+          else if (job.kind === 'CleaningAssessment') {
+            const result = await require('../services/cleaningAssessment.service').processAssessment(job.payload);
+            if (result.retryAt) { await repository.defer(job, result.retryAt); continue; }
+          }
           await repository.complete(job);
         } catch (error) { await repository.retry(job, error); }
         finally { clearInterval(jobHeartbeat); }

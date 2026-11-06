@@ -6,12 +6,4 @@ function success(res, statusCode, data, message = undefined) {
   });
 }
 
-function fail(res, statusCode, message, details = undefined) {
-  return res.status(statusCode).json({
-    success: false,
-    message,
-    details,
-  });
-}
-
-module.exports = { success, fail };
+module.exports = { success };

@@ -25,23 +25,6 @@ async function generateNextResidentCodeForHostel(hostelId, hostelCode) {
   return `${codePrefix}-RES-${paddedSeq}`;
 }
 
-/**
- * Fallback global resident code generator.
- * @returns {Promise<string>}
- */
-async function generateNextResidentCode() {
-  const counter = await Counter.findByIdAndUpdate(
-    'residentCode',
-    { $inc: { seq: 1 } },
-    { new: true, upsert: true }
-  );
-
-  const seqStr = String(counter.seq);
-  const paddedSeq = seqStr.length >= 6 ? seqStr : seqStr.padStart(6, '0');
-  return `RES-${paddedSeq}`;
-}
-
 module.exports = {
   generateNextResidentCodeForHostel,
-  generateNextResidentCode,
 };

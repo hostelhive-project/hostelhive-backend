@@ -15,6 +15,9 @@ module.exports = {
   complete: (job) => OutboxEvent.updateOne({ _id: job._id, status: 'Processing', claimToken: job.claimToken }, {
     $set: { status: 'Completed', leaseUntil: null, claimToken: null, lastError: null },
   }),
+  defer: (job, nextAttemptAt) => OutboxEvent.updateOne({ _id: job._id, status: 'Processing', claimToken: job.claimToken }, {
+    $set: { status: 'Pending', leaseUntil: null, claimToken: null, nextAttemptAt },
+  }),
   retry: (job, error) => OutboxEvent.updateOne({ _id: job._id, status: 'Processing', claimToken: job.claimToken }, { $set: {
     status: 'Pending', leaseUntil: null, claimToken: null, lastError: String(error.message).slice(0, 500),
     nextAttemptAt: new Date(Date.now() + Math.min(300000, 2000 * 2 ** Math.min(job.attempts, 7))),

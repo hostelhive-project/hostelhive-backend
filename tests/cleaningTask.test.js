@@ -10,6 +10,8 @@ const Hostel = require('../src/models/Hostel');
 const Room = require('../src/models/Room');
 const CleaningTask = require('../src/models/CleaningTask');
 const Notification = require('../src/models/Notification');
+const OutboxEvent = require('../src/models/OutboxEvent');
+const CleaningAssessmentBudget = require('../src/models/CleaningAssessmentBudget');
 
 describe('CleaningTask Workflow & Before Photo Verification Suite', () => {
   let cleanerAToken, cleanerBToken, studentToken, adminToken;
@@ -121,6 +123,8 @@ describe('CleaningTask Workflow & Before Photo Verification Suite', () => {
   });
 
   afterAll(async () => {
+    await OutboxEvent.deleteMany({ kind: 'CleaningAssessment' });
+    await CleaningAssessmentBudget.deleteMany({});
     await CleaningTask.deleteMany({
       _id: { $in: [taskA?._id, taskB?._id, taskDelayedWithPhoto?._id, taskDelayedWithoutPhoto?._id].filter(Boolean) },
     });
@@ -230,6 +234,131 @@ describe('CleaningTask Workflow & Before Photo Verification Suite', () => {
 
       expect(res.status).toBe(409);
       expect(res.body.message).toMatch(/Cannot start a task with status "InProgress"/i);
+    });
+  });
+
+  describe('Completion queues an independent AI assessment', () => {
+    test('another staff member cannot complete the task', async () => {
+      const res = await request(app).patch(`/api/cleaning-tasks/${taskA._id}/complete`)
+        .set('Authorization', `Bearer ${cleanerBToken}`).send({ afterImageUri: 'https://ik.imagekit.io/audit-tests/cleaning/after.jpg' });
+      expect(res.status).toBe(403);
+      expect(await OutboxEvent.countDocuments({ _id: `cleaning-ai:${taskA.id}` })).toBe(0);
+    });
+
+    test('missing after photo fails before changing the task', async () => {
+      const res = await request(app).patch(`/api/cleaning-tasks/${taskA._id}/complete`)
+        .set('Authorization', `Bearer ${cleanerAToken}`).send({});
+      expect(res.status).toBe(400);
+      expect((await CleaningTask.findById(taskA.id)).status).toBe('InProgress');
+    });
+
+    test('completion and a single durable assessment request are committed together', async () => {
+      const res = await request(app).patch(`/api/cleaning-tasks/${taskA._id}/complete`)
+        .set('Authorization', `Bearer ${cleanerAToken}`)
+        .send({ afterImageUri: 'https://ik.imagekit.io/audit-tests/cleaning/after.jpg', staffNotes: 'Done' });
+      expect(res.status).toBe(200);
+      expect(res.body.data).toMatchObject({ status: 'Completed', staffNotes: 'Done', cleaningAssessment: { status: 'Pending', score: null, attempts: 0 } });
+      const job = await OutboxEvent.findById(`cleaning-ai:${taskA.id}`);
+      expect(job).toMatchObject({ kind: 'CleaningAssessment', status: 'Pending' });
+      expect(job.payload.taskId).toBe(taskA.id);
+      const repeat = await request(app).patch(`/api/cleaning-tasks/${taskA._id}/complete`)
+        .set('Authorization', `Bearer ${cleanerAToken}`).send({ afterImageUri: 'https://ik.imagekit.io/audit-tests/cleaning/other.jpg' });
+      expect(repeat.status).toBe(409);
+      expect(await OutboxEvent.countDocuments({ _id: `cleaning-ai:${taskA.id}` })).toBe(1);
+    });
+
+    test('a missing API key produces unavailable without undoing completion', async () => {
+      await require('../src/services/cleaningAssessment.service').processAssessment({ taskId: taskA.id });
+      const saved = await CleaningTask.findById(taskA.id);
+      expect(saved.status).toBe('Completed');
+      expect(saved.cleaningAssessment.status).toBe('Unavailable');
+      expect(saved.cleaningAssessment.reason).toBe('not_configured');
+      expect(saved.cleaningAssessment.score).toBeNull();
+      expect(saved.cleaningAssessment.attempts).toBe(0);
+    });
+
+    test('the shared daily budget enforces spacing and its cap atomically', async () => {
+      const repo = require('../src/repositories/cleaningAssessment.repository');
+      const now = new Date(`${new Date().toISOString().slice(0, 10)}T12:00:00.000Z`);
+      const results = await Promise.all(Array.from({ length: 8 }, () => repo.reserve(2, now)));
+      expect(results.filter(result => result.allowed)).toHaveLength(1);
+      expect(results.filter(result => result.retryAt)).toHaveLength(7);
+      const later = new Date(now.getTime() + 66000);
+      expect((await repo.reserve(2, later)).allowed).toBe(true);
+      expect(await repo.reserve(2, new Date(now.getTime() + 132000))).toEqual({ allowed: false, exhausted: true });
+      const saved = await CleaningAssessmentBudget.findById(now.toISOString().slice(0, 10));
+      expect(saved.requests).toBe(2);
+    });
+
+    test('an expired processing claim can be reclaimed; stale workers cannot overwrite it', async () => {
+      const repo = require('../src/repositories/cleaningAssessment.repository');
+      await CleaningTask.updateOne({ _id: taskA.id }, { $set: {
+        'cleaningAssessment.status': 'Processing', 'cleaningAssessment.startedAt': new Date(Date.now() - 130000),
+      } });
+      const stale = await CleaningTask.findById(taskA.id);
+      const fresh = await repo.claim(taskA.id);
+      expect(fresh.cleaningAssessment.status).toBe('Processing');
+      expect((await repo.finish(stale, { status: 'Assessed', score: 10 })).modifiedCount).toBe(0);
+      expect(await repo.claim(taskA.id)).toBeNull();
+      expect((await repo.finish(fresh, { status: 'Unavailable', score: null })).modifiedCount).toBe(1);
+    });
+
+    test('a queue write failure rolls back completion', async () => {
+      const outbox = require('../src/repositories/outbox.repository');
+      const spy = jest.spyOn(outbox, 'enqueue').mockRejectedValueOnce(new Error('Queue persistence failed'));
+      try {
+        const res = await request(app).patch(`/api/cleaning-tasks/${taskDelayedWithPhoto.id}/complete`)
+          .set('Authorization', `Bearer ${cleanerAToken}`).send({ afterImageUri: 'https://ik.imagekit.io/audit-tests/cleaning/after.jpg' });
+        expect(res.status).toBe(500);
+        const saved = await CleaningTask.findById(taskDelayedWithPhoto.id);
+        expect(saved.status).toBe('InProgress');
+        expect(saved.cleaningAssessment).toBeUndefined();
+        expect(saved.afterImageUri).toBeNull();
+      } finally { spy.mockRestore(); }
+    });
+
+    test('disabled assessment still allows completion without queuing a call', async () => {
+      const enabled = env.integrations.cleaningAi.enabled;
+      env.integrations.cleaningAi.enabled = false;
+      try {
+        const res = await request(app).patch(`/api/cleaning-tasks/${taskDelayedWithPhoto.id}/complete`)
+          .set('Authorization', `Bearer ${cleanerAToken}`).send({ afterImageUri: 'https://ik.imagekit.io/audit-tests/cleaning/after.jpg' });
+        expect(res.status).toBe(200);
+        expect(res.body.data).toMatchObject({ status: 'Completed', cleaningAssessment: { status: 'Unavailable', reason: 'disabled', score: null } });
+        expect(await OutboxEvent.countDocuments({ _id: `cleaning-ai:${taskDelayedWithPhoto.id}` })).toBe(0);
+      } finally { env.integrations.cleaningAi.enabled = enabled; }
+    });
+
+    test('a valid provider assessment persists its computed score and breakdown', async () => {
+      const photos = require('../src/services/cleaningPhotos.service');
+      const groq = require('../src/integrations/groqVision');
+      const originalKey = env.integrations.groq.apiKey;
+      const photoSpy = jest.spyOn(photos, 'loadPair').mockResolvedValue({
+        before: 'test-before', after: 'test-after', pairHash: 'test-pair-hash',
+      });
+      const groqSpy = jest.spyOn(groq, 'assessCleaning').mockResolvedValue(JSON.stringify({
+        comparable: true, imageQuality: 'Good', sensitiveContent: false, comparison: 'Improved',
+        summary: 'Visible debris has been removed.', improvements: ['Less litter'], issues: [], limitations: [],
+        breakdown: { waste: 3, floor: 2, surfaces: 2, tidiness: 1 },
+      }));
+      env.integrations.groq.apiKey = 'mock-provider-key';
+      try {
+        await CleaningAssessmentBudget.deleteMany({});
+        await CleaningTask.updateOne({ _id: taskA.id }, { $set: {
+          'cleaningAssessment.status': 'Pending', 'cleaningAssessment.startedAt': null,
+        } });
+        await require('../src/services/cleaningAssessment.service').processAssessment({ taskId: taskA.id });
+        const saved = await CleaningTask.findById(taskA.id).lean();
+        expect(saved.status).toBe('Completed');
+        expect(saved.cleaningAssessment).toMatchObject({
+          status: 'Assessed', score: 8, attempts: 1, pairHash: 'test-pair-hash',
+          breakdown: { waste: 3, floor: 2, surfaces: 2, tidiness: 1 },
+          comparison: 'Improved', reason: null, startedAt: null,
+        });
+        expect(saved.cleaningAssessment.assessedAt).toBeInstanceOf(Date);
+        expect(await require('../src/repositories/cleaningAssessment.repository').claim(taskA.id)).toBeNull();
+        expect(groqSpy).toHaveBeenCalledTimes(1);
+      } finally { photoSpy.mockRestore(); groqSpy.mockRestore(); env.integrations.groq.apiKey = originalKey; }
     });
   });
 

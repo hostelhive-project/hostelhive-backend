@@ -4,6 +4,11 @@
   "description": "HostelHive REST API — Node.js/Express/MongoDB backend",
   "main": "server.js",
   "type": "commonjs",
+  "files": [
+    "server.js",
+    "src/",
+    "scripts/start-local-mongo.cjs"
+  ],
   "scripts": {
     "prestart": "node scripts/start-local-mongo.cjs",
     "start": "node server.js",

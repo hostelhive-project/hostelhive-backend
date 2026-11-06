@@ -31,29 +31,7 @@ async function getAdminHostelId(user) {
   return null;
 }
 
-/**
- * Resolves the resident's hostel ID from their active CheckedIn booking.
- */
-async function resolveResidentHostelId(residentId) {
-  const booking = await Booking.findOne({
-    studentId: residentId,
-    status: 'CheckedIn',
-  }).sort({ createdAt: -1 });
-
-  if (booking && booking.roomId) {
-    const room = await Room.findById(booking.roomId);
-    if (room && room.hostelId) {
-      return room.hostelId;
-    }
-  }
-
-  return null;
-}
-
 const complaintService = {
-  getAdminHostelId,
-  resolveResidentHostelId,
-
   async create(data, residentId) {
     const activeBooking = await Booking.findOne({
       studentId: residentId,

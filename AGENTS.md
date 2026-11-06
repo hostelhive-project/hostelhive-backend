@@ -71,6 +71,7 @@ This prints a `whsec_...` — put it in `.env` as `STRIPE_WEBHOOK_SECRET` (diffe
 | Payments (Stripe Connect — destination charges to the hostel's own account, no platform fee) | ✅ Done | `routes/payment.routes.js`, `integrations/stripe.js`, Stripe onboarding routes in `routes/hostel.routes.js` |
 | Complaints (lifecycle + Critical-severity blockchain log) | ✅ Done | `routes/complaint.routes.js` + chain |
 | Cleaning Tasks (assign/start/complete, afterImageUri enforced + GET /hostel/:hostelId) | ✅ Done | `routes/cleaningTask.routes.js` + chain |
+| Cleaning photo assessment (optional Groq vision, advisory score out of 10) | Implemented | `services/cleaningAssessment.service.js`, durable outbox + persistent quota; setup and limits in `docs/CLEANING_AI.md`. Never changes staff task status or makes an approval decision. |
 | Reviews (nested under hostels, requires a completed stay) | ✅ Done | mounted inside `routes/hostel.routes.js` |
 | Admin Dashboard (rent/occupancy/complaints aggregation) | ✅ Done | `routes/admin.routes.js` + chain |
 | Notifications (in-app inbox + best-effort FCM push) | ✅ Done | `routes/notification.routes.js` + chain, `integrations/firebase.js` |

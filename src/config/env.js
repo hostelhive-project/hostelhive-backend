@@ -43,6 +43,12 @@ module.exports = {
       model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
       baseUrl: process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1',
     },
+    cleaningAi: {
+      enabled: process.env.CLEANING_AI_ENABLED !== 'false',
+      model: process.env.GROQ_VISION_MODEL || 'qwen/qwen3.8-27b',
+      // Fail closed on an invalid limit. This counts requests, including retries, across all hostels.
+      dailyLimit: Math.min(20, Math.max(0, Math.floor(Number(process.env.CLEANING_AI_DAILY_LIMIT ?? 20) || 0))),
+    },
     stripe: {
       secretKey: process.env.STRIPE_SECRET_KEY,
       webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
