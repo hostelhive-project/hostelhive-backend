@@ -1,0 +1,8 @@
+node_modules/
+.env
+.local-mongo.json
+.env.*
+!.env.example
+coverage/
+*.log
+.DS_Store

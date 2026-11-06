@@ -1,0 +1,1042 @@
+{
+  "info": {
+    "name": "HostelHive API",
+    "_postman_id": "hostelhive-api-collection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Covers all implemented endpoints (Auth, Users, Hostels, Rooms) plus one call against each 501-stubbed module. Run requests top to bottom \u2014 tokens and IDs are captured into collection variables automatically."
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000"
+    },
+    {
+      "key": "studentToken",
+      "value": ""
+    },
+    {
+      "key": "studentId",
+      "value": ""
+    },
+    {
+      "key": "adminToken",
+      "value": ""
+    },
+    {
+      "key": "adminId",
+      "value": ""
+    },
+    {
+      "key": "hostelId",
+      "value": ""
+    },
+    {
+      "key": "roomId",
+      "value": ""
+    },
+    {
+      "key": "bookingId",
+      "value": ""
+    },
+    {
+      "key": "invoiceId",
+      "value": ""
+    },
+    {
+      "key": "chatSessionId",
+      "value": ""
+    },
+    {
+      "key": "paymentId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Health Check",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/health"
+      }
+    },
+    {
+      "name": "1. Register Student",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('studentToken', body.data.accessToken);",
+              "pm.collectionVariables.set('studentId', body.data.userId);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/auth/register",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Abu Hurara\",\n  \"email\": \"student1@example.com\",\n  \"password\": \"Password123!\",\n  \"role\": \"Student\",\n  \"phone\": \"+923001234567\",\n  \"regNumber\": \"L1S23BSSE0057\"\n}"
+        }
+      }
+    },
+    {
+      "name": "2. Login Student",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('studentToken', body.data.accessToken);",
+              "pm.collectionVariables.set('studentId', body.data.user._id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/auth/login",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"student1@example.com\",\n  \"password\": \"Password123!\"\n}"
+        }
+      }
+    },
+    {
+      "name": "3. Get My Profile (Student)",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/users/{{studentId}}",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{studentToken}}"
+          }
+        ]
+      }
+    },
+    {
+      "name": "4. Update My Profile (Student)",
+      "request": {
+        "method": "PUT",
+        "url": "{{baseUrl}}/api/users/{{studentId}}",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{studentToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"phone\": \"+923009999999\"\n}"
+        }
+      }
+    },
+    {
+      "name": "5. Register Admin (no hostelId needed yet)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('adminToken', body.data.accessToken);",
+              "pm.collectionVariables.set('adminId', body.data.userId);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/auth/register",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Sir Zain Asghar\",\n  \"email\": \"admin1@example.com\",\n  \"password\": \"Password123!\",\n  \"role\": \"Admin\"\n}"
+        }
+      }
+    },
+    {
+      "name": "6. Create Hostel (Admin) \u2014 auto-claims it",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('hostelId', body.data._id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/hostels",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Green View Hostel\",\n  \"location\": \"Lahore, Pakistan\",\n  \"priceTier\": 15000,\n  \"facilities\": [\"WiFi\", \"Laundry\", \"Mess\"]\n}"
+        }
+      }
+    },
+    {
+      "name": "7. Search Hostels (public, no auth)",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/hostels?location=Lahore"
+      }
+    },
+    {
+      "name": "8. Get Hostel by ID (public)",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/hostels/{{hostelId}}"
+      }
+    },
+    {
+      "name": "9. Update Hostel (Admin, own hostel)",
+      "request": {
+        "method": "PUT",
+        "url": "{{baseUrl}}/api/hostels/{{hostelId}}",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"priceTier\": 16000\n}"
+        }
+      }
+    },
+    {
+      "name": "10. Create Room in Hostel (Admin)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('roomId', body.data._id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/hostels/{{hostelId}}/rooms",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roomNumber\": \"A-101\",\n  \"layoutType\": \"Shared-2\",\n  \"capacity\": 2\n}"
+        }
+      }
+    },
+    {
+      "name": "11. List Rooms in Hostel (public)",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/hostels/{{hostelId}}/rooms"
+      }
+    },
+    {
+      "name": "12. Get Room by ID (public)",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/rooms/{{roomId}}"
+      }
+    },
+    {
+      "name": "13. Update Room Status/Lock (Admin, own hostel)",
+      "request": {
+        "method": "PATCH",
+        "url": "{{baseUrl}}/api/rooms/{{roomId}}/status",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"isLocked\": true,\n  \"occupiedCount\": 1\n}"
+        }
+      }
+    },
+    {
+      "name": "14. Cross-hostel RBAC check (should 401/403 without token)",
+      "request": {
+        "method": "DELETE",
+        "url": "{{baseUrl}}/api/hostels/{{hostelId}}"
+      }
+    },
+    {
+      "name": "15. Stub check \u2014 Notifications (expect 501, not yet built)",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/notifications"
+      }
+    },
+    {
+      "name": "16. Stub check \u2014 AI Chatbot (expect 501, not yet built)",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/chatbot"
+      }
+    },
+    {
+      "name": "17. Request a Booking (Student)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('bookingId', body.data._id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/bookings",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{studentToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roomId\": \"{{roomId}}\",\n  \"emergencyContact\": \"+923001112222\",\n  \"termsAcceptedAt\": \"2026-09-01T00:00:00.000Z\"\n}"
+        }
+      }
+    },
+    {
+      "name": "18. View Pending Bookings for Hostel (Admin)",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/bookings/hostel/{{hostelId}}/pending",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ]
+      }
+    },
+    {
+      "name": "19. Approve Booking (Admin) \u2014 allocates room",
+      "request": {
+        "method": "PATCH",
+        "url": "{{baseUrl}}/api/bookings/{{bookingId}}/approve",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ]
+      }
+    },
+    {
+      "name": "20. Check In Resident (Admin)",
+      "request": {
+        "method": "PATCH",
+        "url": "{{baseUrl}}/api/bookings/{{bookingId}}/checkin",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ]
+      }
+    },
+    {
+      "name": "21. Generate Invoice for Booking (Admin, manual trigger)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('invoiceId', body.data._id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/invoices/booking/{{bookingId}}/generate",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"messFeeAmount\": 4500\n}"
+        }
+      }
+    },
+    {
+      "name": "23. File a Complaint (Student)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('complaintId', body.data._id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/complaints",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{studentToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"description\": \"Leaking tap in room A-101\",\n  \"severityTier\": \"Medium\"\n}"
+        }
+      }
+    },
+    {
+      "name": "24. Update Complaint Status (Admin)",
+      "request": {
+        "method": "PATCH",
+        "url": "{{baseUrl}}/api/complaints/{{complaintId}}/status",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"InReview\"\n}"
+        }
+      }
+    },
+    {
+      "name": "25. Register Cleaning Staff (needs existing hostelId)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('staffToken', body.data.accessToken);",
+              "pm.collectionVariables.set('staffId', body.data.userId);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/auth/register",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Cleaning Staff 1\",\n  \"email\": \"staff1@example.com\",\n  \"password\": \"Password123!\",\n  \"role\": \"CleaningStaff\",\n  \"hostelId\": \"{{hostelId}}\"\n}"
+        }
+      }
+    },
+    {
+      "name": "26. Assign Cleaning Task (Admin)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('taskId', body.data._id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/cleaning-tasks",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roomId\": \"{{roomId}}\",\n  \"assignedStaffId\": \"{{staffId}}\",\n  \"taskType\": \"Routine\",\n  \"scheduledTime\": \"2026-09-05T09:00:00.000Z\"\n}"
+        }
+      }
+    },
+    {
+      "name": "27. Start Task (Cleaning Staff)",
+      "request": {
+        "method": "PATCH",
+        "url": "{{baseUrl}}/api/cleaning-tasks/{{taskId}}/start",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{staffToken}}"
+          }
+        ]
+      }
+    },
+    {
+      "name": "28. Complete Task (Cleaning Staff, afterImageUri required)",
+      "request": {
+        "method": "PATCH",
+        "url": "{{baseUrl}}/api/cleaning-tasks/{{taskId}}/complete",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{staffToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"afterImageUri\": \"https://example.com/photos/after.jpg\",\n  \"staffNotes\": \"Cleaned and sanitized\"\n}"
+        }
+      }
+    },
+    {
+      "name": "29. Submit a Review (Student, requires CheckedIn booking)",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/hostels/{{hostelId}}/reviews",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{studentToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"rating\": 5,\n  \"comment\": \"Great hostel, clean rooms!\"\n}"
+        }
+      }
+    },
+    {
+      "name": "30. List Reviews for Hostel (public)",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/hostels/{{hostelId}}/reviews"
+      }
+    },
+    {
+      "name": "31. Admin Dashboard Summary",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/admin/dashboard/summary",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ]
+      }
+    },
+    {
+      "name": "32. Admin Dashboard Recent Activity",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/admin/dashboard/recent-activity",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ]
+      }
+    },
+    {
+      "name": "17. Register a second Student (to book a room)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('studentToken', body.data.accessToken);",
+              "pm.collectionVariables.set('studentId', body.data.userId);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/auth/register",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Bilal Shahid\",\n  \"email\": \"student2@example.com\",\n  \"password\": \"Password123!\",\n  \"role\": \"Student\"\n}"
+        }
+      }
+    },
+    {
+      "name": "18. Student requests a booking",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('bookingId', body.data._id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/bookings",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{studentToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roomId\": \"{{roomId}}\",\n  \"emergencyContact\": \"+923001112222\",\n  \"termsAcceptedAt\": \"2026-09-15T00:00:00.000Z\"\n}"
+        }
+      }
+    },
+    {
+      "name": "19. Admin approves the booking (allocates room)",
+      "request": {
+        "method": "PATCH",
+        "url": "{{baseUrl}}/api/bookings/{{bookingId}}/approve",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ]
+      }
+    },
+    {
+      "name": "20. Admin checks the resident in",
+      "request": {
+        "method": "PATCH",
+        "url": "{{baseUrl}}/api/bookings/{{bookingId}}/checkin",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ]
+      }
+    },
+    {
+      "name": "21. Admin generates this month's invoice for the booking",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('invoiceId', body.data._id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/invoices/booking/{{bookingId}}/generate",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"messFeeAmount\": 4500\n}"
+        }
+      }
+    },
+    {
+      "name": "22. Admin connects hostel to Stripe (get onboarding link)",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/hostels/{{hostelId}}/stripe/onboard",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ]
+      }
+    },
+    {
+      "name": "23. Admin checks Stripe onboarding status",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/hostels/{{hostelId}}/stripe/status",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ]
+      }
+    },
+    {
+      "name": "24. Student pays the invoice (Stripe Checkout \u2014 destination charge to hostel)",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/payments/checkout",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{studentToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"invoiceId\": \"{{invoiceId}}\"\n}"
+        }
+      },
+      "description": "Returns a checkoutUrl. Open it and pay with test card 4242 4242 4242 4242. Requires: the hostel has finished Stripe onboarding (request 22-23), STRIPE_SECRET_KEY set, and the Stripe CLI forwarding webhooks to /api/payments/webhook \u2014 see AGENTS.md."
+    },
+    {
+      "name": "25. Admin: manually mark invoice paid (offline payment, no Stripe needed)",
+      "request": {
+        "method": "PATCH",
+        "url": "{{baseUrl}}/api/invoices/{{invoiceId}}/mark-paid",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ]
+      }
+    },
+    {
+      "name": "26. Admin dashboard summary (rent collected, occupancy, complaints, staff)",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/admin/dashboard/summary",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ]
+      }
+    },
+    {
+      "name": "27. Admin fills the hostel's chatbot info form",
+      "request": {
+        "method": "PUT",
+        "url": "{{baseUrl}}/api/hostels/{{hostelId}}/chatbot-info",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"wifiPassword\": \"greenview2026\",\n  \"checkInTime\": \"2:00 PM\",\n  \"checkOutTime\": \"11:00 AM\",\n  \"rules\": [\"No smoking indoors\", \"Quiet hours after 10 PM\", \"Guests must sign in at reception\"],\n  \"contactNumber\": \"+92 42 1234567\",\n  \"emergencyContact\": \"+92 300 1112222\",\n  \"nearbyLandmarks\": \"5 minutes walk from UCP main gate\",\n  \"additionalInfo\": \"Laundry service runs Mon/Wed/Fri. Mess closes at 10 PM.\"\n}"
+        }
+      }
+    },
+    {
+      "name": "28. Get the hostel's chatbot info (public)",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/hostels/{{hostelId}}/chatbot-info"
+      }
+    },
+    {
+      "name": "29. Resident asks the chatbot a question (new session)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('chatSessionId', body.data.sessionId);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/chatbot/message",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{studentToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"message\": \"What time is check-in and what's the WiFi password?\"\n}"
+        }
+      },
+      "description": "Requires GROQ_API_KEY set in .env. Reply is grounded only in this hostel's chatbot-info form (request 27)."
+    },
+    {
+      "name": "30. Resident asks a follow-up (same session \u2014 tests context memory)",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/chatbot/message",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{studentToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"message\": \"And what about check-out?\",\n  \"sessionId\": \"{{chatSessionId}}\"\n}"
+        }
+      },
+      "description": "Doesn't repeat 'hostel' in the question \u2014 if context works, the bot still knows which hostel/topic this refers to from the previous turn."
+    },
+    {
+      "name": "31. Get chat history for a session",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/chatbot/history?sessionId={{chatSessionId}}",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{studentToken}}"
+          }
+        ]
+      }
+    },
+    {
+      "name": "32. List all chat sessions for the resident",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/chatbot/sessions",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{studentToken}}"
+          }
+        ]
+      }
+    },
+    {
+      "name": "33. Resident's notification inbox",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/notifications",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{studentToken}}"
+          }
+        ]
+      },
+      "description": "Should show a 'Booking approved' and 'Rent due' notification from earlier requests (19, 21)."
+    },
+    {
+      "name": "34. Unread notification count",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/notifications/unread-count",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{studentToken}}"
+          }
+        ]
+      }
+    },
+    {
+      "name": "35. Mark all notifications as read",
+      "request": {
+        "method": "PATCH",
+        "url": "{{baseUrl}}/api/notifications/read-all",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{studentToken}}"
+          }
+        ]
+      }
+    },
+    {
+      "name": "36. Verify a payment's blockchain record",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/blockchain/Payment/{{paymentId}}/verify",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{studentToken}}"
+          }
+        ]
+      },
+      "description": "Set the {{paymentId}} variable to a real Payment _id after a checkout settles via webhook. Returns hash, blockRef, network, and explorerUrl (a real PolygonScan link if BLOCKCHAIN_RPC_URL/BLOCKCHAIN_PRIVATE_KEY are set, null otherwise)."
+    },
+    {
+      "name": "37. List all bookings for hostel (Admin)",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/bookings/hostel/{{hostelId}}",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ]
+      },
+      "description": "Returns all bookings for rooms belonging to {{hostelId}} with optional ?status= filter."
+    },
+    {
+      "name": "38. List all invoices for hostel (Admin)",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/invoices/hostel/{{hostelId}}",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ]
+      },
+      "description": "Returns all invoices for bookings in {{hostelId}} with populated student and room info and optional ?status= filter."
+    },
+    {
+      "name": "39. List all cleaning tasks for hostel (Admin)",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/cleaning-tasks/hostel/{{hostelId}}",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ]
+      },
+      "description": "Returns all cleaning tasks for rooms in {{hostelId}} with assigned staff and room details and optional ?status= filter."
+    }
+  ]
+}
