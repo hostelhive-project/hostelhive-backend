@@ -2,6 +2,8 @@
 
 This guide accompanies `../../HOSTELHIVE_BACKEND_FIX_REPORT.md`. Source fixes are implemented; configuration and existing provider data require the steps below. No existing application database or ImageKit files were migrated by the implementation work.
 
+**Render + Brevo hosting:** see [the deployment guide](RENDER_DEPLOYMENT.md). Email uses Brevo HTTPS in local development and deployment with `BREVO_API_KEY` and a verified `EMAIL_FROM`. The request deadline defaults to 15 seconds (`EMAIL_API_TIMEOUT_MS`); the existing 90-second OTP expiry and auth contracts are preserved. No live provider delivery is implied by passing configuration validation.
+
 ## 1. Use a transaction-capable database
 
 **Subsequent fresh-start reset, 6 November 2026:** at the user's request, both project databases on ports 27018 and 27017 were emptied, the migration backup was deleted, and no new backup was made. The replica configuration and collection indexes remain active. Migration counts below are historical.
@@ -82,7 +84,7 @@ The implementation does not discard or rewrite conflicting history automatically
 - Refresh tokens rotate once and are backed by hashed `AuthSession` records. Old refresh tokens without the new session identity require a new sign-in.
 - Password reset/change and logout invalidate previously issued access tokens through `sessionVersion` and revoke refresh sessions. Logout currently signs that account out on **all devices**. Password change also requires signing in again; clients must handle the following 401.
 - Existing access tokens without a version are accepted only while the account remains at version zero. They become invalid on the first revocation event.
-- Account limits are normalized-email/user-ID buckets backed by MongoDB. The general Express IP limit remains process-local; configure trusted-proxy/network controls deliberately for a multi-instance deployment. Do not enable blanket `trust proxy` on an untrusted network.
+- Account limits are normalized-email/user-ID buckets backed by MongoDB. Since the 7 November hosting hardening, general/auth IP quotas also persist in MongoDB in production; development/test IP quotas use memory. Configure trusted-proxy/network controls deliberately; alwaysdata's X-Real-IP needs explicit header selection and a trusted socket peer. Do not enable blanket `trust proxy`. See [alwaysdata deployment](ALWAYSDATA_DEPLOYMENT.md).
 
 ## 5. Stripe delivery and reconciliation
 
@@ -137,7 +139,7 @@ Start with `npm run dev` or `npm start` so `server.js` starts both workers. Impo
 
 ## 8. Checks performed and safe reruns
 
-See the fix report for the final test counts. Automated checks use a separate temporary **replica set**, never the configured application database. Jest creates random `hostelhive_test_*` databases for the ordinary suites; the existing catalog and navigation suites retain their own guarded `hostelhive_room_catalog_test_*` and `hostelhive_ui_navigation_test_*` names. `connectDB()` refuses the ordinary application database in test mode. SMTP, push, Groq and chain sends are disabled; live Stripe is opt-in and skipped by default.
+See the fix report for the final test counts. Automated checks use a separate temporary **replica set**, never the configured application database. Jest creates random `hostelhive_test_*` databases for the ordinary suites; the existing catalog and navigation suites retain their own guarded `hostelhive_room_catalog_test_*` and `hostelhive_ui_navigation_test_*` names. `connectDB()` refuses the ordinary application database in test mode. Email, push, Groq and chain sends are disabled; live Stripe is opt-in and skipped by default.
 
 To rerun against your development replica set while keeping test databases isolated:
 
@@ -149,4 +151,4 @@ npm.cmd test
 
 Legacy suites may leave fixture-only documents in their generated test databases. Remove only confirmed disposable `hostelhive_test_*` databases after the run. Do not run collection-wide cleanup in the application database.
 
-Live Stripe delivery, real testnet broadcasts, SMTP/push delivery, ImageKit privacy/cache migration and frontend receipt/re-authentication rendering were not exercised by these offline checks.
+Live Stripe delivery, real testnet broadcasts, email/push delivery, ImageKit privacy/cache migration and frontend receipt/re-authentication rendering were not exercised by these offline checks.

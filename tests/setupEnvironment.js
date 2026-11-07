@@ -3,8 +3,7 @@ const crypto = require('crypto');
 process.env.NODE_ENV = 'test';
 process.env.TEST_DATABASE_NAME = `hostelhive_test_${process.pid}_${crypto.randomBytes(8).toString('hex')}`;
 // Tests never deliver email, push, LLM requests or blockchain transactions.
-process.env.EMAIL_USER = '';
-process.env.EMAIL_APP_PASSWORD = '';
+process.env.BREVO_API_KEY = '';
 process.env.FIREBASE_PROJECT_ID = '';
 process.env.FIREBASE_CLIENT_EMAIL = '';
 process.env.FIREBASE_PRIVATE_KEY = '';

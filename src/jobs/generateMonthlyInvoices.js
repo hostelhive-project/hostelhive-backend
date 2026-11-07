@@ -7,9 +7,11 @@ const leases = require('../repositories/jobLease.repository');
 // hourly so downtime at a month boundary does not lose a billing cycle.
 function scheduleMonthlyInvoiceGeneration() {
   let running = false;
+  let stopped = false;
+  let activeRun;
   const owner = crypto.randomUUID();
   const run = async () => {
-    if (running) return;
+    if (running || stopped) return;
     running = true;
     let heartbeat;
     try {
@@ -19,8 +21,17 @@ function scheduleMonthlyInvoiceGeneration() {
     } catch (error) { console.error('[billing] Reconciliation will retry:', error.message); }
     finally { clearInterval(heartbeat); await leases.release('billing', owner).catch(() => {}); running = false; }
   };
-  const job = cron.schedule('5 * * * *', () => { void run(); }, { timezone: process.env.BILLING_TIMEZONE || 'Asia/Karachi' });
-  void run();
-  return () => job.stop();
+  const launch = () => {
+    if (stopped || running) return;
+    activeRun = run();
+    void activeRun.catch(() => undefined);
+  };
+  const job = cron.schedule('5 * * * *', launch, { timezone: process.env.BILLING_TIMEZONE || 'Asia/Karachi' });
+  launch();
+  return () => {
+    stopped = true;
+    job.stop();
+    return activeRun;
+  };
 }
 module.exports = scheduleMonthlyInvoiceGeneration;

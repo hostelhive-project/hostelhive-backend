@@ -4,9 +4,11 @@ const leases = require('../repositories/jobLease.repository');
 
 function scheduleOutbox() {
   let running = false;
+  let stopped = false;
+  let activeRun;
   const owner = crypto.randomUUID();
   const run = async () => {
-    if (running) return;
+    if (running || stopped) return;
     running = true;
     let heartbeat;
     let leaseLost = false;
@@ -18,7 +20,7 @@ function scheduleOutbox() {
       }, 15000);
       await require('../services/blockchain.service').reconcile();
       for (let count = 0; count < 10; count++) {
-        if (leaseLost) break;
+        if (leaseLost || stopped) break;
         const job = await repository.claim();
         if (!job) break;
         const jobHeartbeat = setInterval(() => { void repository.renew(job).catch(() => {}); }, 30000);
@@ -37,8 +39,17 @@ function scheduleOutbox() {
     } catch (error) { console.error('[outbox] Delivery deferred:', error.message); }
     finally { clearInterval(heartbeat); await leases.release('outbox', owner).catch(() => {}); running = false; }
   };
-  const timer = setInterval(() => { void run(); }, 5000);
-  void run();
-  return () => clearInterval(timer);
+  const launch = () => {
+    if (stopped || running) return;
+    activeRun = run();
+    void activeRun.catch(() => undefined);
+  };
+  const timer = setInterval(launch, 5000);
+  launch();
+  return () => {
+    stopped = true;
+    clearInterval(timer);
+    return activeRun;
+  };
 }
 module.exports = scheduleOutbox;

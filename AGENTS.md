@@ -126,3 +126,17 @@ npm test                    # jest + supertest
 - Stripe checkout return URLs preserve existing query parameters and include invoice/booking IDs. The redirect remains informational; webhook settlement remains authoritative.
 - FCM messages include string-valued notification/user/type/entity routing fields. Mobile notification handling waits for session and navigator readiness.
 - Regression coverage: `tests/uiNavigationRegression.test.js`, `tests/roomCatalog.test.js` and deterministic cases in `tests/stripeCurrency.test.js`. Use a dedicated test database; do not run the live Stripe integration case without an available test-mode connection.
+
+## Production hosting preparation (7 November 2026)
+
+- See `docs/ALWAYSDATA_DEPLOYMENT.md`; `npm run config:check` performs offline production configuration validation without provider calls or secret output.
+- `server.js` binds host-assigned IP/HOST/PORT, starts workers after successful binding and drains HTTP/jobs with a deadline before disconnecting MongoDB. Production startup verifies transaction-capable topology and creates declared indexes, never syncs/drops them.
+- IP quotas persist through `RateLimitBucket` in production; isolated tests/development use memory. Tighter per-account buckets remain. Explicit trusted-proxy configuration protects forwarded headers; alwaysdata's X-Real-IP requires opt-in and a trusted socket peer. `/health`, `/ready`, OPTIONS and the signed raw-body Stripe webhook are exempt from the general limiter.
+- Production CORS uses exact HTTPS browser origins; native originless requests remain supported. The frontend/backend contracts and OTP expiry remain unchanged. Email uses Brevo's HTTPS API with a bounded timeout. Pool/upload defaults suit initial small-host evaluation, not a guaranteed load rating.
+
+## Render + Brevo email delivery (7 November 2026)
+
+- Brevo is the only email provider in local development and deployment, using its fixed HTTPS transactional email endpoint through Node's built-in fetch. Configure server-only `BREVO_API_KEY` and a verified `EMAIL_FROM` sender. The request deadline defaults to 15 seconds (`EMAIL_API_TIMEOUT_MS`, allowed 1-30 seconds).
+- `sendOtpEmail(email, otp, purpose)`, the three OTP purposes and 90-second expiry are preserved; auth, routes and client payloads are unchanged. The email configuration contains only the API key, sender and API timeout.
+- Brevo requires HTTP 201 with a message ID for acceptance. Safe logs record a failure category/status only; provider acceptance does not prove delivery. No automatic retry, key/OTP/provider-body logging or live provider call is made during configuration validation.
+- Follow `docs/RENDER_DEPLOYMENT.md`. Render Free sleeps while idle, pausing in-process billing/outbox workers until the backend runs again; this integration does not provide always-on background execution.

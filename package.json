@@ -15,6 +15,7 @@
     "predev": "node scripts/start-local-mongo.cjs",
     "dev": "nodemon server.js",
     "db:start": "node scripts/start-local-mongo.cjs --required",
+    "config:check": "node -e \"process.env.NODE_ENV='production';require('./src/config/validateProduction').validateProductionConfiguration(require('./src/config/env'));console.log('Production configuration is valid.');\"",
     "test": "jest --runInBand",
     "lint": "eslint src"
   },
@@ -36,7 +37,6 @@
     "morgan": "^1.10.0",
     "multer": "^2.4.0",
     "node-cron": "^3.0.3",
-    "nodemailer": "^10.3.1",
     "stripe": "^15.7.0",
     "uuid": "^9.0.1"
   },

@@ -1,10 +1,23 @@
 
-// eslint-disable-next-line no-unused-vars
 function errorHandler(err, req, res, next) {
+  if (res.headersSent) return next(err);
   let statusCode = err.statusCode || 500;
   let message = err.message || 'Internal server error';
   let details = err.details;
   let errors = err.errors;
+
+  // Body-parser errors are client errors; never echo submitted JSON or values.
+  if (err.type === 'entity.parse.failed') {
+    statusCode = 400;
+    message = 'The request body must contain valid JSON.';
+    details = undefined;
+    errors = undefined;
+  } else if (err.type === 'entity.too.large' || err.type === 'parameters.too.many') {
+    statusCode = 413;
+    message = 'The request body exceeds the allowed size.';
+    details = undefined;
+    errors = undefined;
+  }
 
   // Mongoose validation errors
   if (err.name === 'ValidationError') {
@@ -63,7 +76,7 @@ function errorHandler(err, req, res, next) {
   // Log internal unexpected errors
   if (!err.isOperational && statusCode >= 500) {
     // eslint-disable-next-line no-console
-    console.error(`[unexpected error] ${req.method} ${req.originalUrl}:`, err);
+    console.error(`[unexpected error] ${req.method} ${req.originalUrl.split('?')[0]}: ${err.name || 'Error'}`);
     message = 'The server could not complete your request. Please try again later.';
     details = undefined;
     errors = undefined;

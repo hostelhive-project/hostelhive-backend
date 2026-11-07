@@ -1,4 +1,29 @@
-require('dotenv').config();
+// Resolve the backend environment independently of the host's working directory.
+require('dotenv').config({ path: require('node:path').resolve(__dirname, '..', '..', '.env') });
+const { isIP } = require('net');
+
+function configuredNumber(name, fallback) {
+  return process.env[name] === undefined ? fallback : Number(process.env[name]);
+}
+
+function trustedProxy() {
+  const value = (process.env.TRUST_PROXY ?? 'false').trim();
+  if (value === 'false' || value === '0') return false;
+  if (/^[1-9]\d*$/.test(value) && Number(value) <= 10) return Number(value);
+
+  const networks = value.split(',').map((entry) => entry.trim());
+  const valid = networks.every((entry) => {
+    if (['loopback', 'linklocal', 'uniquelocal'].includes(entry)) return true;
+    const [address, mask, ...extra] = entry.split('/');
+    const family = isIP(address);
+    if (!family || extra.length > 0) return false;
+    if (mask === undefined) return true;
+    return /^\d+$/.test(mask) && Number(mask) > 0 && Number(mask) <= (family === 4 ? 32 : 128);
+  });
+  if (valid) return networks;
+  // A blanket true or /0 would trust a client-controlled X-Forwarded-For header.
+  throw new Error('Invalid TRUST_PROXY. Use false, a proxy hop count from 1 to 10, or explicit trusted IP addresses/CIDRs.');
+}
 
 function required(name, fallback = undefined) {
   const value = process.env[name] ?? fallback;
@@ -11,9 +36,38 @@ function required(name, fallback = undefined) {
 }
 
 module.exports = {
-  port: process.env.PORT || 5000,
+  port: configuredNumber('PORT', 5000),
+  // alwaysdata supplies IP and PORT to Node.js applications.
+  host: process.env.IP || process.env.HOST || '0.0.0.0',
   nodeEnv: process.env.NODE_ENV || 'development',
+  trustProxy: trustedProxy(),
+  clientIpHeader: process.env.CLIENT_IP_HEADER || 'x-forwarded-for',
+  server: {
+    requestTimeoutMs: configuredNumber('HTTP_REQUEST_TIMEOUT_MS', 120000),
+    headersTimeoutMs: configuredNumber('HTTP_HEADERS_TIMEOUT_MS', 60000),
+    keepAliveTimeoutMs: configuredNumber('HTTP_KEEP_ALIVE_TIMEOUT_MS', 5000),
+    shutdownTimeoutMs: configuredNumber('SHUTDOWN_TIMEOUT_MS', 15000),
+  },
+  rateLimit: {
+    api: {
+      windowMs: configuredNumber('API_RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000),
+      max: configuredNumber('API_RATE_LIMIT_MAX', 300),
+    },
+    auth: {
+      windowMs: configuredNumber('AUTH_RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000),
+      max: configuredNumber('AUTH_RATE_LIMIT_MAX', 60),
+    },
+  },
   mongoUri: required('MONGO_URI', 'mongodb://localhost:27017/hostelhive'),
+  mongo: {
+    maxPoolSize: configuredNumber('MONGO_MAX_POOL_SIZE', 10),
+    minPoolSize: configuredNumber('MONGO_MIN_POOL_SIZE', 0),
+    serverSelectionTimeoutMs: configuredNumber('MONGO_SERVER_SELECTION_TIMEOUT_MS', 10000),
+  },
+  uploads: {
+    maxConcurrent: configuredNumber('UPLOAD_MAX_CONCURRENT', process.env.NODE_ENV === 'production' ? 1 : 4),
+    maxConcurrentPerUser: configuredNumber('UPLOAD_MAX_CONCURRENT_PER_USER', process.env.NODE_ENV === 'production' ? 1 : 2),
+  },
   jwt: {
     secret: required('JWT_SECRET'),
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
@@ -22,10 +76,8 @@ module.exports = {
   },
   bcryptSaltRounds: Number(process.env.BCRYPT_SALT_ROUNDS || 10),
   email: {
-    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-    port: Number(process.env.EMAIL_PORT || 587),
-    user: process.env.EMAIL_USER,
-    password: process.env.EMAIL_APP_PASSWORD,
+    brevoApiKey: (process.env.BREVO_API_KEY || '').trim(),
+    apiTimeoutMs: configuredNumber('EMAIL_API_TIMEOUT_MS', 15000),
     from: process.env.EMAIL_FROM,
   },
   cors: {
@@ -75,7 +127,7 @@ module.exports = {
     imagekit: {
       publicKey: (process.env.IMAGEKIT_PUBLIC_KEY || '').trim(),
       privateKey: (process.env.IMAGEKIT_PRIVATE_KEY || '').trim(),
-      urlEndpoint: (process.env.IMAGEKIT_URL_ENDPOINT || 'https://ik.imagekit.io/pvafewi0b').trim(),
+      urlEndpoint: (process.env.IMAGEKIT_URL_ENDPOINT || (process.env.NODE_ENV === 'production' ? '' : 'https://ik.imagekit.io/pvafewi0b')).trim(),
     },
   },
 };
