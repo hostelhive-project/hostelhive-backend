@@ -19,7 +19,9 @@ concurrency:
 jobs:
   backend-ci:
     name: Backend checks
-    runs-on: ubuntu-24.04
+    # MongoDB 8 can exit at startup on recent Ubuntu 24.04 runner kernels.
+    # Use the workaround recommended in actions/runner-images#15005.
+    runs-on: ubuntu-22.04
     timeout-minutes: 20
     defaults:
       run:
@@ -57,6 +59,7 @@ jobs:
       - name: Start isolated transaction-capable MongoDB
         timeout-minutes: 5
         run: |
+          uname -sr
           docker run --detach --name hostelhive-ci-mongo \
             --publish 127.0.0.1:27017:27017 \
             mongo:8.0-noble --replSet hostelhiveCI --bind_ip_all
@@ -132,6 +135,18 @@ jobs:
 
           main().catch(error => {
             console.error(`CI MongoDB startup failed: ${error.name}: ${error.message}`);
+            // Include the server's actual error in this failed step too, so it
+            // is visible without expanding the separate diagnostics step.
+            for (const args of [
+              ['inspect', '--format', 'State: {{json .State}}', 'hostelhive-ci-mongo'],
+              ['logs', 'hostelhive-ci-mongo'],
+            ]) {
+              try {
+                execFileSync('docker', args, { stdio: 'inherit', timeout: 10000 });
+              } catch {
+                console.error('Could not retrieve one of the CI MongoDB diagnostics.');
+              }
+            }
             process.exitCode = 1;
           });
           NODE

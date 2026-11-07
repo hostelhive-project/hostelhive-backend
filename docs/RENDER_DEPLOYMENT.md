@@ -49,7 +49,7 @@ Render's default **On Commit** setting deploys immediately without waiting for C
 | Stage | Implementation |
 | --- | --- |
 | Events | Push to `main`, pull request targeting `main`, manual dispatch |
-| Runtime | GitHub-hosted Ubuntu 24.04, Node 22.22.0 |
+| Runtime | GitHub-hosted Ubuntu 22.04, Node 22.22.0 |
 | Dependencies | `npm ci --include=dev --no-audit --no-fund`, using the committed lockfile |
 | Static checks | `npm run lint` and `node --check` for tracked JavaScript/CJS/MJS files |
 | Database | Disposable MongoDB 8.0 container, bound to runner loopback; the existing MongoDB driver initializes `hostelhiveCI`, waits for a primary and checks the same URI used by Jest |
@@ -58,7 +58,9 @@ Render's default **On Commit** setting deploys immediately without waiting for C
 
 The runner never uses the production Atlas database. No new tests or application endpoints are introduced by this workflow. Production configuration is validated in the Render build with the actual Render environment, not with production secrets in CI. CI files and tests remain outside the existing npm package and Docker runtime allowlists; a native Render service still clones the Git repository and installs production dependencies only.
 
-If the MongoDB startup step fails, expand both **Start isolated transaction-capable MongoDB** and **Show MongoDB diagnostics on failure**. The workflow prints driver connection errors, detects an exited container, and retains its state and full startup logs. Image download success alone does not mean the database started. These failures concern the disposable CI database; do not add production Atlas credentials to GitHub to work around them.
+CI uses Ubuntu 22.04 as the recommended workaround for the [MongoDB 8 / recent GitHub Ubuntu runner kernel startup issue](https://github.com/actions/runner-images/issues/15005). Docker containers share the runner's kernel; an Ubuntu-based container does not avoid that host incompatibility. Keep MongoDB 8 and the full suite enabled. Reconsider the runner pin after a compatible MongoDB 8 release and runner combination is verified.
+
+If the MongoDB startup step fails, its error handler prints the container state and full server logs in the failed step itself. **Show MongoDB diagnostics on failure** also provides them if a later step fails. The workflow prints driver connection errors and detects an exited container. Image download success alone does not mean the database started. These failures concern the disposable CI database; do not add production Atlas credentials to GitHub to work around them.
 
 ## 4. Enter Render environment settings
 
