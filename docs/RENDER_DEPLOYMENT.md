@@ -52,11 +52,13 @@ Render's default **On Commit** setting deploys immediately without waiting for C
 | Runtime | GitHub-hosted Ubuntu 24.04, Node 22.22.0 |
 | Dependencies | `npm ci --include=dev --no-audit --no-fund`, using the committed lockfile |
 | Static checks | `npm run lint` and `node --check` for tracked JavaScript/CJS/MJS files |
-| Database | Disposable MongoDB 8.0 container, bound to runner loopback, initialized as the `hostelhiveCI` replica set before tests |
+| Database | Disposable MongoDB 8.0 container, bound to runner loopback; the existing MongoDB driver initializes `hostelhiveCI`, waits for a primary and checks the same URI used by Jest |
 | Existing tests | `npm test -- --ci`; Jest's current setup uses isolated database names, mocked/disabled providers and fixture credentials; live Stripe testing is disabled |
 | Cleanup | The CI container and its temporary volumes are removed after the job; superseded runs are cancelled and jobs have a 20-minute deadline |
 
 The runner never uses the production Atlas database. No new tests or application endpoints are introduced by this workflow. Production configuration is validated in the Render build with the actual Render environment, not with production secrets in CI. CI files and tests remain outside the existing npm package and Docker runtime allowlists; a native Render service still clones the Git repository and installs production dependencies only.
+
+If the MongoDB startup step fails, expand both **Start isolated transaction-capable MongoDB** and **Show MongoDB diagnostics on failure**. The workflow prints driver connection errors, detects an exited container, and retains its state and full startup logs. Image download success alone does not mean the database started. These failures concern the disposable CI database; do not add production Atlas credentials to GitHub to work around them.
 
 ## 4. Enter Render environment settings
 

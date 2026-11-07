@@ -55,41 +55,86 @@ jobs:
         run: git ls-files -z -- '*.js' '*.cjs' '*.mjs' | xargs -0 -r -n 1 node --check
 
       - name: Start isolated transaction-capable MongoDB
+        timeout-minutes: 5
         run: |
           docker run --detach --name hostelhive-ci-mongo \
             --publish 127.0.0.1:27017:27017 \
             mongo:8.0-noble --replSet hostelhiveCI --bind_ip_all
 
-          ready=false
-          for attempt in {1..30}; do
-            if docker exec hostelhive-ci-mongo mongosh --quiet --eval \
-              'if (db.adminCommand({ ping: 1 }).ok !== 1) quit(1)' >/dev/null 2>&1; then
-              ready=true
-              break
-            fi
-            sleep 2
-          done
-          if [ "$ready" != true ]; then
-            echo '::error::CI MongoDB did not start within 60 seconds.'
-            exit 1
-          fi
+          # Use the same driver/network path as Jest instead of requiring mongosh
+          # to work inside the image. No production settings are loaded here.
+          node <<'NODE'
+          const { MongoClient } = require('mongoose').mongo;
+          const { execFileSync } = require('node:child_process');
+          const { setTimeout: delay } = require('node:timers/promises');
+          const replicaSet = 'hostelhiveCI';
+          // Omit replicaSet until initiation; connect directly to the IPv4 port.
+          const bootstrapUri = 'mongodb://127.0.0.1:27017/?directConnection=true';
 
-          docker exec hostelhive-ci-mongo mongosh --quiet --eval \
-            'rs.initiate({ _id: "hostelhiveCI", members: [{ _id: 0, host: "127.0.0.1:27017" }] })'
+          async function withAdmin(action, uri = bootstrapUri) {
+            const client = new MongoClient(uri, {
+              serverSelectionTimeoutMS: 2000,
+              connectTimeoutMS: 2000,
+              socketTimeoutMS: 5000,
+            });
+            try {
+              await client.connect();
+              return await action(client.db('admin'));
+            } finally {
+              await client.close();
+            }
+          }
 
-          ready=false
-          for attempt in {1..30}; do
-            if docker exec hostelhive-ci-mongo mongosh --quiet --eval \
-              'if (!db.hello().isWritablePrimary) quit(1)' >/dev/null 2>&1; then
-              ready=true
-              break
-            fi
-            sleep 2
-          done
-          if [ "$ready" != true ]; then
-            echo '::error::CI MongoDB replica set did not elect a primary within 60 seconds.'
-            exit 1
-          fi
+          async function waitFor(label, action) {
+            const deadline = Date.now() + 90000;
+            let lastError;
+            let attempt = 0;
+            while (Date.now() < deadline) {
+              const running = execFileSync('docker', [
+                'inspect', '--format', '{{.State.Running}}', 'hostelhive-ci-mongo',
+              ], { encoding: 'utf8' }).trim();
+              if (running !== 'true') {
+                throw new Error(`CI MongoDB container stopped while waiting for ${label}. See container diagnostics below.`);
+              }
+              try {
+                await action();
+                console.log(`MongoDB ready: ${label}.`);
+                return;
+              } catch (error) {
+                lastError = error;
+                if (attempt++ % 5 === 0) {
+                  console.log(`Waiting for ${label}: ${error.name}: ${error.message}`);
+                }
+              }
+              await delay(2000);
+            }
+            throw new Error(`Timed out waiting for ${label}: ${lastError?.message || 'no response'}`);
+          }
+
+          async function main() {
+            await waitFor('initial connection', () => withAdmin(db => db.command({ ping: 1 })));
+            await withAdmin(db => db.command({
+              replSetInitiate: {
+                _id: replicaSet,
+                members: [{ _id: 0, host: 'localhost:27017' }],
+              },
+            }));
+            await waitFor('replica set primary', () => withAdmin(async db => {
+              const hello = await db.command({ hello: 1 });
+              if (!hello.isWritablePrimary || hello.setName !== replicaSet) {
+                throw new Error('The expected replica set has not elected a writable primary yet.');
+              }
+            }));
+            // Verify the exact replica-set URI that the existing tests will use.
+            await withAdmin(db => db.command({ ping: 1 }), process.env.MONGO_URI);
+            console.log('CI MongoDB replica set is ready for the existing tests.');
+          }
+
+          main().catch(error => {
+            console.error(`CI MongoDB startup failed: ${error.name}: ${error.message}`);
+            process.exitCode = 1;
+          });
+          NODE
 
       - name: Run existing automated tests
         run: npm test -- --ci
@@ -98,7 +143,9 @@ jobs:
         if: failure()
         run: |
           if docker container inspect hostelhive-ci-mongo >/dev/null 2>&1; then
-            docker logs --tail 100 hostelhive-ci-mongo
+            docker inspect --format 'State: {{json .State}}' hostelhive-ci-mongo
+            # Preserve startup errors as well as the most recent server output.
+            docker logs hostelhive-ci-mongo
           fi
 
       - name: Remove temporary CI database
