@@ -18,11 +18,12 @@ Prepared 7 November 2026. These instructions match the existing backend. Email u
 
 ## 3. Create the Render service
 
-Push the intended backend changes to the chosen GitHub branch without committing `.env`. In Render select **New > Web Service** and connect that repository.
+Commit and push the intended backend changes, including `.github/workflows/backend-ci.yml`, to `main` without committing `.env`. In GitHub's **Actions** tab, wait for the **Backend CI / Backend checks** job to pass before creating the first service. In Render select **New > Web Service** and connect the GitHub repository through the GitHub integration.
 
 | Field | Value |
 | --- | --- |
 | Runtime | Node |
+| Branch | `main` |
 | Root directory | Leave blank for a backend-only repository. For a combined repository use the actual backend folder path relative to its Git root. |
 | Build command | `npm ci --omit=dev && npm run config:check` |
 | Start command | `node server.js` |
@@ -32,6 +33,30 @@ Push the intended backend changes to the chosen GitHub branch without committing
 The build command validates configuration offline, without opening a database connection or contacting providers. Production startup separately connects to Atlas, verifies transaction support, and creates declared indexes before listening. Index conflicts prevent startup; no indexes or documents are dropped.
 
 Do not use nodemon, local MongoDB startup commands or a command that imports only `src/app.js`.
+
+### Configure continuous deployment once
+
+1. Open the service's **Settings > Auto-Deploy** and select **After CI Checks Pass**. If the creation form exposes this option under **Advanced**, select it there before the first deployment; otherwise make the change after creation. The initial service creation is a deployment, so check the first GitHub run before clicking **Deploy web service**.
+2. Keep the linked branch set to `main`. Use a connected GitHub repository, not just a public Git URL. Grant Render access to that repository when GitHub requests it.
+3. Keep production secrets in Render's **Environment** section. This CI workflow does not need `.env`, an Atlas URI, provider keys, a Render API token or a deploy-hook secret in GitHub.
+4. Subsequent pushes/merges to `main` run CI. Render automatically builds and deploys the commit after its checks pass. Pull requests run CI without deploying; a manual GitHub workflow run only runs CI and is not an explicit deployment request.
+5. Check CI in GitHub **Actions**, then deployment status in Render **Events** and build/runtime logs. A green CI check does not prove that Render's separate build, configuration validation or readiness checks passed. If CI fails, correct the failure and push again; do not switch to **On Commit** to bypass it.
+
+Render's default **On Commit** setting deploys immediately without waiting for CI. Set **After CI Checks Pass** explicitly. Render does not deploy when no checks are detected or any check fails; it accepts GitHub `success`, `neutral` and `skipped` conclusions. The backend job has no path filters or job-level skip condition, so changes to `main` receive the complete check. Do not also add a deploy-hook workflow: this service uses Render's native integration to deploy the checked commit.
+
+### What CI checks
+
+| Stage | Implementation |
+| --- | --- |
+| Events | Push to `main`, pull request targeting `main`, manual dispatch |
+| Runtime | GitHub-hosted Ubuntu 24.04, Node 22.22.0 |
+| Dependencies | `npm ci --include=dev --no-audit --no-fund`, using the committed lockfile |
+| Static checks | `npm run lint` and `node --check` for tracked JavaScript/CJS/MJS files |
+| Database | Disposable MongoDB 8.0 container, bound to runner loopback, initialized as the `hostelhiveCI` replica set before tests |
+| Existing tests | `npm test -- --ci`; Jest's current setup uses isolated database names, mocked/disabled providers and fixture credentials; live Stripe testing is disabled |
+| Cleanup | The CI container and its temporary volumes are removed after the job; superseded runs are cancelled and jobs have a 20-minute deadline |
+
+The runner never uses the production Atlas database. No new tests or application endpoints are introduced by this workflow. Production configuration is validated in the Render build with the actual Render environment, not with production secrets in CI. CI files and tests remain outside the existing npm package and Docker runtime allowlists; a native Render service still clones the Git repository and installs production dependencies only.
 
 ## 4. Enter Render environment settings
 
@@ -98,6 +123,10 @@ Atlas stores application data and ImageKit stores uploads. Render's ephemeral fi
 ## Official references
 
 - [Render Node/Express deployment](https://render.com/docs/deploy-node-express-app)
+- [Render automatic deployments and CI integration](https://render.com/docs/deploys#integrating-with-ci)
+- [GitHub checkout action](https://github.com/actions/checkout)
+- [GitHub Node setup and npm caching](https://github.com/actions/setup-node)
+- [MongoDB official Docker image](https://hub.docker.com/_/mongo)
 - [Render port binding](https://render.com/docs/web-services#port-binding)
 - [Render Node versions](https://render.com/docs/node-version)
 - [Render Free restrictions](https://render.com/docs/free)

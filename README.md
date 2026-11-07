@@ -22,6 +22,14 @@ Email uses Brevo's HTTPS API in local development and deployment. Set `BREVO_API
 
 Keep credentials server-side and never commit `.env`. Delivery failures return the existing safe HTTP 503 response without logging keys, OTPs, recipients or provider response bodies. Ambiguous requests are not automatically resent.
 
+## CI/CD with GitHub Actions and Render
+
+The workflow in [`.github/workflows/backend-ci.yml`](./.github/workflows/backend-ci.yml) runs on pushes and pull requests to `main`, or manually from GitHub Actions. It installs locked dependencies on Node 22.22.0, checks lint and JavaScript syntax, and runs the existing Jest suite against a temporary MongoDB 8.0 replica set on the runner. It needs no production database or provider secrets; live Stripe tests remain disabled.
+
+Connect this backend repository's `main` branch to Render, then select **Settings > Auto-Deploy > After CI Checks Pass**. The flow is `push/merge to main -> GitHub checks pass -> Render builds and deploys that commit`. Pull requests run checks without deploying. A failed check blocks automatic deployment. No deploy hook or Render API key is required in GitHub.
+
+Commit and push the workflow before creating the first Render service, and wait for **Backend checks** to pass. Configure production secrets privately in Render and use the build/start/readiness settings in [`docs/RENDER_DEPLOYMENT.md`](./docs/RENDER_DEPLOYMENT.md). Adding the workflow locally does not create a service or enable its dashboard settings. GitHub Actions shows CI results; Render Events/logs show deployment results.
+
 ## Stack
 
 Express · MongoDB/Mongoose · JWT + bcrypt · Joi validation · Helmet/CORS/rate-limiting · node-cron (scheduled jobs) · Firebase Cloud Messaging (push) · external payment gateway + AI chatbot + blockchain ledger integrations.

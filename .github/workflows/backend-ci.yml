@@ -1,0 +1,109 @@
+name: Backend CI
+
+# Render deploys the linked main commit after this workflow passes.
+# Enable Settings > Auto-Deploy > After CI Checks Pass in Render.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-ci:
+    name: Backend checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      CI: 'true'
+      NODE_ENV: test
+      # This database exists only on the disposable GitHub runner, never Atlas.
+      # The existing Jest setup assigns isolated database names to test suites.
+      MONGO_URI: mongodb://127.0.0.1:27017/?replicaSet=hostelhiveCI&directConnection=true
+      RUN_LIVE_STRIPE_TESTS: 'false'
+
+    steps:
+      - name: Check out this commit
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22.22.0'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install locked dependencies including development tools
+        run: npm ci --include=dev --no-audit --no-fund
+
+      - name: Lint backend source
+        run: npm run lint
+
+      - name: Check JavaScript syntax
+        run: git ls-files -z -- '*.js' '*.cjs' '*.mjs' | xargs -0 -r -n 1 node --check
+
+      - name: Start isolated transaction-capable MongoDB
+        run: |
+          docker run --detach --name hostelhive-ci-mongo \
+            --publish 127.0.0.1:27017:27017 \
+            mongo:8.0-noble --replSet hostelhiveCI --bind_ip_all
+
+          ready=false
+          for attempt in {1..30}; do
+            if docker exec hostelhive-ci-mongo mongosh --quiet --eval \
+              'if (db.adminCommand({ ping: 1 }).ok !== 1) quit(1)' >/dev/null 2>&1; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" != true ]; then
+            echo '::error::CI MongoDB did not start within 60 seconds.'
+            exit 1
+          fi
+
+          docker exec hostelhive-ci-mongo mongosh --quiet --eval \
+            'rs.initiate({ _id: "hostelhiveCI", members: [{ _id: 0, host: "127.0.0.1:27017" }] })'
+
+          ready=false
+          for attempt in {1..30}; do
+            if docker exec hostelhive-ci-mongo mongosh --quiet --eval \
+              'if (!db.hello().isWritablePrimary) quit(1)' >/dev/null 2>&1; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" != true ]; then
+            echo '::error::CI MongoDB replica set did not elect a primary within 60 seconds.'
+            exit 1
+          fi
+
+      - name: Run existing automated tests
+        run: npm test -- --ci
+
+      - name: Show MongoDB diagnostics on failure
+        if: failure()
+        run: |
+          if docker container inspect hostelhive-ci-mongo >/dev/null 2>&1; then
+            docker logs --tail 100 hostelhive-ci-mongo
+          fi
+
+      - name: Remove temporary CI database
+        if: always()
+        run: |
+          if docker container inspect hostelhive-ci-mongo >/dev/null 2>&1; then
+            docker rm --force --volumes hostelhive-ci-mongo
+          fi

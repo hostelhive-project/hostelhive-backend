@@ -140,3 +140,8 @@ npm test                    # jest + supertest
 - `sendOtpEmail(email, otp, purpose)`, the three OTP purposes and 90-second expiry are preserved; auth, routes and client payloads are unchanged. The email configuration contains only the API key, sender and API timeout.
 - Brevo requires HTTP 201 with a message ID for acceptance. Safe logs record a failure category/status only; provider acceptance does not prove delivery. No automatic retry, key/OTP/provider-body logging or live provider call is made during configuration validation.
 - Follow `docs/RENDER_DEPLOYMENT.md`. Render Free sleeps while idle, pausing in-process billing/outbox workers until the backend runs again; this integration does not provide always-on background execution.
+
+## Backend CI and Render deployment (7 November 2026)
+
+- `.github/workflows/backend-ci.yml` runs on pushes/PRs to `main` and manual dispatch: Node 22.22.0, locked install, source lint, tracked JavaScript syntax and the existing Jest suite. A temporary MongoDB 8.0 replica set supports transaction tests; never supply an Atlas URI or real provider credentials to this job. Existing fixtures isolate database names and disable live providers; live Stripe tests stay opt-in outside CI.
+- Continuous deployment uses Render's connected GitHub integration with **Auto-Deploy > After CI Checks Pass**, linked to `main`. No deploy-hook/API token is used. Dashboard setup and first deployment are separate from committing the workflow; follow `docs/RENDER_DEPLOYMENT.md`. GitHub checks indicate CI status; Render reports the actual deployment result.
